@@ -102,9 +102,13 @@ async fn update_slot_metrics(
 
     crate::metrics::UPSTREAM_SLOT.set(upstream_slot.unwrap_or_default() as f64);
     for (id, slot) in downstream_slots {
-        crate::metrics::DOWNSTREAM_SLOTS
-            .with_label_values(&[&id])
-            .set(slot.unwrap_or_default() as f64);
+        if let Some(slot) = slot {
+            crate::metrics::DOWNSTREAM_SLOTS
+                .with_label_values(&[&id])
+                .set(slot as f64);
+        } else {
+            let _ = crate::metrics::DOWNSTREAM_SLOTS.remove_label_values(&[&id]);
+        }
     }
 
     Ok(())

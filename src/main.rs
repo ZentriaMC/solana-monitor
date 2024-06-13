@@ -78,11 +78,19 @@ async fn main() -> Result<(), BoxError> {
     let args = Cli::parse();
 
     // Prepare clients
-    let upstream_client = HttpClientBuilder::new().build(args.upstream_rpc.to_string())?;
+    // Request timeout is half of the poll interval, I think it's a good starting point
+    let request_timeout = args.poll_interval / 2;
+
+    let upstream_client = HttpClientBuilder::new()
+        .request_timeout(request_timeout)
+        .build(args.upstream_rpc.to_string())?;
+
     let mut downstream_clients: HashMap<String, HttpClient> =
         HashMap::with_capacity(args.downstream_rpc.len());
     for IdUrlPair((id, uri)) in args.downstream_rpc {
-        let client = HttpClientBuilder::new().build(&uri.to_string())?;
+        let client = HttpClientBuilder::new()
+            .request_timeout(request_timeout)
+            .build(&uri.to_string())?;
         downstream_clients.insert(id, client);
     }
 

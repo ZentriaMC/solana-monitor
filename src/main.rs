@@ -1,13 +1,15 @@
-use std::{collections::HashMap, net::SocketAddr, str::FromStr, time::Duration};
+use std::{collections::HashMap, net::SocketAddr, time::Duration};
 
 use clap::Parser;
 use http::Uri;
+use id_url::{IdUrlPair, IdUrlPairs};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use tokio::{signal::ctrl_c, task::JoinSet};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, level_filters::LevelFilter};
+use tracing::{error, info, level_filters::LevelFilter, trace};
 use tracing_subscriber::EnvFilter;
 
+mod id_url;
 mod metrics;
 mod solana_rpc;
 mod task;
@@ -37,32 +39,10 @@ pub struct Cli {
         env = "SOLANA_MONITOR_DOWNSTREAM_RPC",
         default_value = "localhost=http://127.0.0.1:8899"
     )]
-    pub downstream_rpc: Vec<IdUrlPair>,
+    pub downstream_rpc: IdUrlPairs,
 
     #[clap(long, env = "SOLANA_MONITOR_POLL_INTERVAL", value_parser = parse_duration::parse, default_value = "2500ms")]
     pub poll_interval: Duration,
-}
-
-#[derive(Clone)]
-pub struct IdUrlPair(pub (String, Uri));
-
-impl FromStr for IdUrlPair {
-    type Err = BoxError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut split = s.splitn(2, '=');
-
-        let id = split.next().ok_or("missing id")?.to_string();
-        let uri: Uri = split.next().ok_or("missing uri")?.parse()?;
-
-        Ok(Self((id, uri)))
-    }
-}
-
-impl std::fmt::Debug for IdUrlPair {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}={}", self.0 .0, self.0 .1)
-    }
 }
 
 #[tokio::main]
@@ -76,6 +56,7 @@ async fn main() -> Result<(), BoxError> {
         .init();
 
     let args = Cli::parse();
+    trace!(?args, "arguments");
 
     // Prepare clients
     // Request timeout is half of the poll interval, I think it's a good starting point
@@ -87,11 +68,11 @@ async fn main() -> Result<(), BoxError> {
 
     let mut downstream_clients: HashMap<String, HttpClient> =
         HashMap::with_capacity(args.downstream_rpc.len());
-    for IdUrlPair((id, uri)) in args.downstream_rpc {
+    for IdUrlPair((id, uri)) in args.downstream_rpc.iter() {
         let client = HttpClientBuilder::new()
             .request_timeout(request_timeout)
             .build(&uri.to_string())?;
-        downstream_clients.insert(id, client);
+        downstream_clients.insert(id.clone(), client);
     }
 
     let cancel = CancellationToken::new();

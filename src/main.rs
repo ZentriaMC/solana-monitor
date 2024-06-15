@@ -11,6 +11,7 @@ use tracing_subscriber::EnvFilter;
 
 mod id_url;
 mod metrics;
+mod prom_u64;
 mod solana_rpc;
 mod task;
 

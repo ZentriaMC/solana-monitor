@@ -2,20 +2,21 @@ use http::{header::CONTENT_TYPE, StatusCode};
 use http_body_util::Full;
 use hyper::{body::Bytes, Request, Response};
 use lazy_static::lazy_static;
-use prometheus::{
-    labels, opts, register_gauge, register_gauge_vec, Encoder, Gauge, GaugeVec, TextEncoder,
+use prometheus::{labels, opts, Encoder, TextEncoder};
+
+use crate::{
+    prom_u64::{GaugeU64, GaugeVecU64},
+    register_gauge_u64, register_gauge_vec_u64, BoxError,
 };
 
-use crate::BoxError;
-
 lazy_static! {
-    pub static ref UPSTREAM_SLOT: Gauge = register_gauge!(opts!(
+    pub static ref UPSTREAM_SLOT: GaugeU64 = register_gauge_u64!(opts!(
         "solana_upstream_slot",
         "The latest slot from the upstream RPC",
         labels! {"network" => "mainnet-beta"}
     ))
     .unwrap();
-    pub static ref DOWNSTREAM_SLOTS: GaugeVec = register_gauge_vec!(
+    pub static ref DOWNSTREAM_SLOTS: GaugeVecU64 = register_gauge_vec_u64!(
         opts!(
             "solana_downstream_slots",
             "The latest slot from the downstream RPC",

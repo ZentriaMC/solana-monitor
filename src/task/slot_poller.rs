@@ -100,7 +100,10 @@ async fn update_slot_metrics(
 
     debug!(?upstream_slot, ?downstream_slots, "slots");
 
-    crate::metrics::UPSTREAM_SLOT.set(upstream_slot.unwrap_or_default());
+    if let Some(slot) = upstream_slot {
+        crate::metrics::UPSTREAM_SLOT.set(slot);
+    }
+
     for (id, slot) in downstream_slots {
         if let Some(slot) = slot {
             crate::metrics::DOWNSTREAM_SLOTS

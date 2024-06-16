@@ -1,6 +1,7 @@
-use std::{collections::HashMap, net::SocketAddr, time::Duration};
+use std::{collections::HashMap, net::SocketAddr};
 
 use clap::Parser;
+use duration_string::DurationString;
 use http::Uri;
 use id_url::{IdUrlPair, IdUrlPairs};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
@@ -42,8 +43,8 @@ pub struct Cli {
     )]
     pub downstream_rpc: IdUrlPairs,
 
-    #[clap(long, env = "SOLANA_MONITOR_POLL_INTERVAL", value_parser = parse_duration::parse, default_value = "2500ms")]
-    pub poll_interval: Duration,
+    #[clap(long, env = "SOLANA_MONITOR_POLL_INTERVAL", default_value = "2500ms")]
+    pub poll_interval: DurationString,
 }
 
 #[tokio::main]
@@ -61,7 +62,7 @@ async fn main() -> Result<(), BoxError> {
 
     // Prepare clients
     // Request timeout is half of the poll interval, I think it's a good starting point
-    let request_timeout = args.poll_interval / 2;
+    let request_timeout = *args.poll_interval / 2;
 
     let upstream_client = HttpClientBuilder::new()
         .request_timeout(request_timeout)
@@ -84,7 +85,7 @@ async fn main() -> Result<(), BoxError> {
 
     rs.spawn(crate::task::slot_poller(
         cancel.clone(),
-        args.poll_interval,
+        *args.poll_interval,
         upstream_client,
         downstream_clients,
         commitment_config,

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::anyhow;
-use futures::future::try_join_all;
+use futures_util::future::try_join_all;
 use jsonrpsee::{core::ClientError, http_client::HttpClient};
 use tokio::{select, time::MissedTickBehavior};
 use tokio_util::sync::CancellationToken;

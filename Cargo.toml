@@ -32,3 +32,7 @@ tokio = { version = "1.38.0", features = [
 tokio-util = { version = "0.7.11", features = ["futures-util"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+
+[profile.release]
+opt-level = 3
+lto = true

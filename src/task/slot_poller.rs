@@ -1,8 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use anyhow::anyhow;
 use futures_util::future::try_join_all;
-use jsonrpsee::{core::ClientError, http_client::HttpClient};
 use tokio::{select, time::MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error};
@@ -12,11 +10,38 @@ use crate::{
     BoxError,
 };
 
+#[derive(Debug)]
+pub struct SlotError {
+    id: String,
+    source: BoxError,
+}
+
+impl SlotError {
+    pub fn new<I: Into<String>, E: Into<BoxError>>(id: I, source: E) -> Self {
+        Self {
+            id: id.into(),
+            source: source.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for SlotError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "failed to get slot for '{}': {:?}", self.id, self.source)
+    }
+}
+
+impl std::error::Error for SlotError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&*self.source)
+    }
+}
+
 pub async fn slot_poller(
     cancel: CancellationToken,
     poll_interval: Duration,
-    upstream_client: HttpClient,
-    downstream_clients: HashMap<String, HttpClient>,
+    upstream_client: SolanaRPCClient,
+    downstream_clients: HashMap<String, SolanaRPCClient>,
     commitment_config: Option<CommitmentConfig>,
 ) -> Result<(), BoxError> {
     let mut interval = tokio::time::interval(poll_interval);
@@ -42,33 +67,33 @@ pub async fn slot_poller(
 
 async fn get_node_slot(
     id: String,
-    client: &HttpClient,
+    client: &SolanaRPCClient,
     commitment_config: Option<CommitmentConfig>,
 ) -> Result<(String, Option<u64>), BoxError> {
     let slot = client.get_slot(commitment_config).await;
 
     match slot {
         Ok(slot) => Ok((id, Some(slot))),
-
-        err @ Err(ClientError::Transport(_))
-        | err @ Err(ClientError::RequestTimeout)
-        | err @ Err(ClientError::ParseError(_))
-        | err @ Err(ClientError::InvalidRequestId(_)) => {
+        Err(err)
+            if err.is_redirect()
+                || err.is_status()
+                || err.is_timeout()
+                || err.is_request()
+                || err.is_connect()
+                || err.is_body()
+                || err.is_decode() =>
+        {
             debug!(?err, "failed to get slot for '{}', ignoring", id);
 
             Ok((id, None))
         }
-
-        // TODO: anyhow is overkill for this
-        Err(e) => Err(anyhow!(e)
-            .context(format!("failed to get slot for '{}'", id))
-            .into()),
+        Err(e) => Err(SlotError::new(id, e).into()),
     }
 }
 
 async fn get_node_slots(
-    upstream: &HttpClient,
-    nodes: &HashMap<String, HttpClient>,
+    upstream: &SolanaRPCClient,
+    nodes: &HashMap<String, SolanaRPCClient>,
     commitment_config: Option<CommitmentConfig>,
 ) -> Result<(Option<u64>, HashMap<String, Option<u64>>), BoxError> {
     let mut tasks = vec![];
@@ -91,8 +116,8 @@ async fn get_node_slots(
 }
 
 async fn update_slot_metrics(
-    upstream_client: &HttpClient,
-    downstream_clients: &HashMap<String, HttpClient>,
+    upstream_client: &SolanaRPCClient,
+    downstream_clients: &HashMap<String, SolanaRPCClient>,
     commitment_config: Option<CommitmentConfig>,
 ) -> Result<(), BoxError> {
     let (upstream_slot, downstream_slots) =

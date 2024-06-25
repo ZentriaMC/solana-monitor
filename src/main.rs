@@ -4,7 +4,6 @@ use clap::Parser;
 use duration_string::DurationString;
 use http::Uri;
 use id_url::IdUrlPair;
-use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use tokio::{signal::ctrl_c, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, level_filters::LevelFilter, trace};
@@ -16,7 +15,9 @@ mod prom_u64;
 mod solana_rpc;
 mod task;
 
-use crate::solana_rpc::CommitmentConfig;
+use crate::solana_rpc::{CommitmentConfig, SolanaRPCClient};
+
+pub static HTTP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -65,16 +66,12 @@ async fn main() -> Result<(), BoxError> {
     // Request timeout is half of the poll interval, I think it's a good starting point
     let request_timeout = *args.poll_interval / 2;
 
-    let upstream_client = HttpClientBuilder::new()
-        .request_timeout(request_timeout)
-        .build(args.upstream_rpc.to_string())?;
+    let upstream_client = SolanaRPCClient::new(args.upstream_rpc.to_string(), request_timeout);
 
-    let mut downstream_clients: HashMap<String, HttpClient> =
+    let mut downstream_clients: HashMap<String, SolanaRPCClient> =
         HashMap::with_capacity(args.downstream_rpc.len());
     for IdUrlPair((id, uri)) in args.downstream_rpc.iter() {
-        let client = HttpClientBuilder::new()
-            .request_timeout(request_timeout)
-            .build(&uri.to_string())?;
+        let client = SolanaRPCClient::new(uri.to_string(), request_timeout);
         downstream_clients.insert(id.clone(), client);
     }
 

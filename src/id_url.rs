@@ -1,4 +1,4 @@
-use std::{ops::Deref, str::FromStr};
+use std::str::FromStr;
 
 use http::Uri;
 
@@ -23,29 +23,5 @@ impl FromStr for IdUrlPair {
 impl std::fmt::Debug for IdUrlPair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}={}", self.0 .0, self.0 .1)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct IdUrlPairs(pub Vec<IdUrlPair>);
-
-impl FromStr for IdUrlPairs {
-    type Err = BoxError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let pairs = s
-            .split(',')
-            .map(|s| s.trim().parse())
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(Self(pairs))
-    }
-}
-
-impl Deref for IdUrlPairs {
-    type Target = Vec<IdUrlPair>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }

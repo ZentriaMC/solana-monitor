@@ -3,7 +3,7 @@ use std::{collections::HashMap, net::SocketAddr};
 use clap::Parser;
 use duration_string::DurationString;
 use http::Uri;
-use id_url::{IdUrlPair, IdUrlPairs};
+use id_url::IdUrlPair;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use tokio::{signal::ctrl_c, task::JoinSet};
 use tokio_util::sync::CancellationToken;
@@ -39,9 +39,10 @@ pub struct Cli {
     #[clap(
         long,
         env = "SOLANA_MONITOR_DOWNSTREAM_RPC",
-        default_value = "localhost=http://127.0.0.1:8899"
+        default_value = "localhost=http://127.0.0.1:8899",
+        value_delimiter = ','
     )]
-    pub downstream_rpc: IdUrlPairs,
+    pub downstream_rpc: Vec<IdUrlPair>,
 
     #[clap(long, env = "SOLANA_MONITOR_POLL_INTERVAL", default_value = "2500ms")]
     pub poll_interval: DurationString,

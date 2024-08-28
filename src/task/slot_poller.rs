@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use futures_util::future::try_join_all;
 use tokio::{select, time::MissedTickBehavior};
@@ -6,6 +6,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error};
 
 use crate::{
+    metrics::Metrics,
     solana_rpc::{CommitmentConfig, SolanaRPCClient},
     BoxError,
 };
@@ -40,7 +41,8 @@ impl std::error::Error for SlotError {
 pub async fn slot_poller(
     cancel: CancellationToken,
     poll_interval: Duration,
-    upstream_client: SolanaRPCClient,
+    metrics: Arc<Metrics>,
+    upstream_client: Option<SolanaRPCClient>,
     downstream_clients: HashMap<String, SolanaRPCClient>,
     commitment_config: Option<CommitmentConfig>,
 ) -> Result<(), BoxError> {
@@ -52,6 +54,7 @@ pub async fn slot_poller(
             _ = cancel.cancelled() => break,
             _ = interval.tick() => {
                 if let Err(err) = update_slot_metrics(
+                    &metrics,
                     &upstream_client,
                     &downstream_clients,
                     commitment_config
@@ -92,17 +95,19 @@ async fn get_node_slot(
 }
 
 async fn get_node_slots(
-    upstream: &SolanaRPCClient,
+    upstream: &Option<SolanaRPCClient>,
     nodes: &HashMap<String, SolanaRPCClient>,
     commitment_config: Option<CommitmentConfig>,
 ) -> Result<(Option<u64>, HashMap<String, Option<u64>>), BoxError> {
     let mut tasks = vec![];
 
-    tasks.push(get_node_slot(
-        "upstream".to_string(),
-        upstream,
-        commitment_config,
-    ));
+    if let Some(upstream) = upstream {
+        tasks.push(get_node_slot(
+            "upstream".to_string(),
+            upstream,
+            commitment_config,
+        ));
+    }
 
     for (id, client) in nodes {
         tasks.push(get_node_slot(id.clone(), client, commitment_config))
@@ -110,32 +115,35 @@ async fn get_node_slots(
 
     let mut results: HashMap<String, Option<u64>> =
         try_join_all(tasks).await?.into_iter().collect();
-    let upstream_slot = results.remove("upstream").unwrap();
+    let upstream_slot = results.remove("upstream").unwrap_or(None);
 
     Ok((upstream_slot, results))
 }
 
 async fn update_slot_metrics(
-    upstream_client: &SolanaRPCClient,
+    metrics: &Metrics,
+    upstream_client: &Option<SolanaRPCClient>,
     downstream_clients: &HashMap<String, SolanaRPCClient>,
     commitment_config: Option<CommitmentConfig>,
 ) -> Result<(), BoxError> {
     let (upstream_slot, downstream_slots) =
         get_node_slots(upstream_client, downstream_clients, commitment_config).await?;
 
-    debug!(?upstream_slot, ?downstream_slots, "slots");
+    if metrics.upstream_slot.is_some() {
+        debug!(?upstream_slot, ?downstream_slots, "slots");
+    } else {
+        debug!(?downstream_slots, "slots");
+    }
 
-    if let Some(slot) = upstream_slot {
-        crate::metrics::UPSTREAM_SLOT.set(slot);
+    if let (Some(slot), Some(gauge)) = (upstream_slot, metrics.upstream_slot.as_ref()) {
+        gauge.set(slot);
     }
 
     for (id, slot) in downstream_slots {
         if let Some(slot) = slot {
-            crate::metrics::DOWNSTREAM_SLOTS
-                .with_label_values(&[&id])
-                .set(slot);
+            metrics.downstream_slots.with_label_values(&[&id]).set(slot);
         } else {
-            let _ = crate::metrics::DOWNSTREAM_SLOTS.remove_label_values(&[&id]);
+            let _ = metrics.downstream_slots.remove_label_values(&[&id]);
         }
     }
 

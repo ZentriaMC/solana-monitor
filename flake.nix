@@ -46,6 +46,10 @@
           src = craneLib.cleanCargoSource ./.;
           strictDeps = true;
 
+          nativeBuildInputs = lib.optionals stdenv.isLinux [
+            pkgs.pkg-config
+          ];
+
           buildInputs = lib.optionals stdenv.isLinux [
             pkgs.openssl
           ] ++ lib.optionals stdenv.isDarwin [
@@ -53,6 +57,28 @@
             pkgs.darwin.apple_sdk.frameworks.Security
             pkgs.libiconv
           ];
+        };
+
+        packages.dockerImage = pkgs.dockerTools.buildImage {
+          name = "solana-monitor";
+          tag = self.rev or "latest";
+          copyToRoot = [
+            pkgs.catatonit
+            pkgs.cacert
+            packages.solana-monitor
+          ];
+          config = {
+            Labels = {
+              "org.opencontainers.image.source" = "https://github.com/callStatic/solana-monitor";
+            } // lib.optionalAttrs (self ? rev) {
+              "org.opencontainers.image.revision" = self.rev;
+            };
+            Env = [
+              "SOLANA_MONITOR_LISTEN_ADDRESS=0.0.0.0:2112"
+            ];
+            Entrypoint = [ "${pkgs.catatonit}/bin/catatonit" "--" ];
+            Cmd = [ "${packages.solana-monitor}/bin/solana-monitor" ];
+          };
         };
       });
 }

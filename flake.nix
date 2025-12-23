@@ -68,7 +68,7 @@
           ];
           config = {
             Labels = {
-              "org.opencontainers.image.source" = "https://github.com/callStatic/solana-monitor";
+              "org.opencontainers.image.source" = "https://github.com/ZentriaMC/solana-monitor";
             } // lib.optionalAttrs (self ? rev) {
               "org.opencontainers.image.revision" = self.rev;
             };

@@ -6,7 +6,6 @@
     flake-utils.url = "github:numtide/flake-utils";
     crane = {
       url = "github:ipetkov/crane";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -44,18 +43,6 @@
         packages.solana-monitor = craneLib.buildPackage rec {
           src = craneLib.cleanCargoSource ./.;
           strictDeps = true;
-
-          nativeBuildInputs = lib.optionals stdenv.isLinux [
-            pkgs.pkg-config
-          ];
-
-          buildInputs = lib.optionals stdenv.isLinux [
-            pkgs.openssl
-          ] ++ lib.optionals stdenv.isDarwin [
-            pkgs.darwin.apple_sdk.frameworks.CoreFoundation
-            pkgs.darwin.apple_sdk.frameworks.Security
-            pkgs.libiconv
-          ];
         };
 
         packages.dockerImage = pkgs.dockerTools.buildImage {

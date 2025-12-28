@@ -15,21 +15,26 @@
 
   outputs = { self, nixpkgs, flake-utils, crane, rust-overlay, ... }:
     let
-      supportedSystems = [
-        "aarch64-darwin"
+      linuxSystems = [
         "aarch64-linux"
-        "x86_64-darwin"
         "x86_64-linux"
       ];
+
+      supportedSystems = linuxSystems ++ [
+        "aarch64-darwin"
+        "x86_64-darwin"
+      ];
+
+      importPkgs = system: import nixpkgs {
+        inherit system;
+        overlays = [
+          (import rust-overlay)
+        ];
+      };
     in
     flake-utils.lib.eachSystem supportedSystems (system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [
-            (import rust-overlay)
-          ];
-        };
+        pkgs = importPkgs system;
         inherit (pkgs) lib stdenv;
 
         rust-toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
@@ -40,30 +45,32 @@
           packages = [ ];
         };
 
-        packages.solana-monitor = craneLib.buildPackage rec {
-          src = craneLib.cleanCargoSource ./.;
-          strictDeps = true;
-        };
-
-        packages.dockerImage = pkgs.dockerTools.buildImage {
-          name = "solana-monitor";
-          tag = self.rev or "latest";
-          copyToRoot = [
-            pkgs.catatonit
-            pkgs.cacert
-            packages.solana-monitor
-          ];
-          config = {
-            Labels = {
-              "org.opencontainers.image.source" = "https://github.com/ZentriaMC/solana-monitor";
-            } // lib.optionalAttrs (self ? rev) {
-              "org.opencontainers.image.revision" = self.rev;
-            };
-            Env = [
-              "SOLANA_MONITOR_LISTEN_ADDRESS=0.0.0.0:2112"
+        packages = {
+          solana-monitor = craneLib.buildPackage {
+            src = craneLib.cleanCargoSource ./.;
+            strictDeps = true;
+          };
+        } // lib.optionalAttrs (builtins.elem system linuxSystems) rec {
+          dockerImage = pkgs.dockerTools.buildImage {
+            name = "solana-monitor";
+            tag = self.rev or "latest";
+            copyToRoot = [
+              pkgs.catatonit
+              pkgs.cacert
+              packages.solana-monitor
             ];
-            Entrypoint = [ "${pkgs.catatonit}/bin/catatonit" "--" ];
-            Cmd = [ "${packages.solana-monitor}/bin/solana-monitor" ];
+            config = {
+              Labels = {
+                "org.opencontainers.image.source" = "https://github.com/ZentriaMC/solana-monitor";
+              } // lib.optionalAttrs (self ? rev) {
+                "org.opencontainers.image.revision" = self.rev;
+              };
+              Env = [
+                "SOLANA_MONITOR_LISTEN_ADDRESS=0.0.0.0:2112"
+              ];
+              Entrypoint = [ "${pkgs.catatonit}/bin/catatonit" "--" ];
+              Cmd = [ "${packages.solana-monitor}/bin/solana-monitor" ];
+            };
           };
         };
       });

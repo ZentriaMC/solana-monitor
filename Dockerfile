@@ -44,5 +44,6 @@ COPY --from=builder --chown=0:0 /build/solana-monitor /usr/local/bin/solana-moni
 
 USER 2000:2000
 ENV PATH=/usr/local/bin
+ENV SOLANA_MONITOR_LISTEN_ADDRESS=0.0.0.0:2112
 
 CMD ["solana-monitor"]

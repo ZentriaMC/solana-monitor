@@ -64,11 +64,11 @@ jobs:
           for arch in amd64 arm64; do
             case "${arch}" in
               amd64)
-                binary_name="solana-monitor-x86_64-unknown-linux-gnu"
+                binary_name="solana-monitor-x86_64-unknown-linux-musl"
                 platform="linux/amd64"
                 ;;
               arm64)
-                binary_name="solana-monitor-aarch64-unknown-linux-gnu"
+                binary_name="solana-monitor-aarch64-unknown-linux-musl"
                 platform="linux/arm64"
                 ;;
             esac
